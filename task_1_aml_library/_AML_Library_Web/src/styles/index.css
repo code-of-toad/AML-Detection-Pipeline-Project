@@ -1,0 +1,92 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-stone-50 text-slate-800;
+  background-color: #fafaf9;
+  color: #1e293b;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  }
+}
+
+@layer components {
+  .markdown-content {
+    @apply max-w-none;
+  }
+  
+  .markdown-content h1 {
+    @apply text-3xl font-bold mb-6 text-slate-800;
+  }
+  
+  .markdown-content h2 {
+    @apply text-2xl font-semibold mt-8 mb-4 text-slate-700;
+  }
+  
+  .markdown-content h3 {
+    @apply text-xl font-semibold mt-6 mb-3 text-slate-600;
+  }
+  
+  .markdown-content p {
+    @apply mb-4 text-slate-600 leading-relaxed;
+  }
+  
+  .markdown-content table {
+    @apply w-full border-collapse mb-6;
+  }
+  
+  .markdown-content th {
+    @apply bg-primary-600 text-white px-4 py-3 text-left font-semibold;
+  }
+  
+  .markdown-content td {
+    @apply border border-slate-200 px-4 py-2;
+  }
+  
+  .markdown-content tr:nth-child(even) {
+    @apply bg-stone-50;
+  }
+  
+  /* Sidebar scrollbar styling */
+  .sidebar-scroll::-webkit-scrollbar {
+    width: 8px;
+  }
+  
+  .sidebar-scroll::-webkit-scrollbar-track {
+    background: #f5f5f4;
+    border-radius: 4px;
+  }
+  
+  .sidebar-scroll::-webkit-scrollbar-thumb {
+    background: #4a89dc;
+    border-radius: 4px;
+  }
+  
+  .sidebar-scroll::-webkit-scrollbar-thumb:hover {
+    background: #3d6fb8;
+  }
+  
+  /* Firefox scrollbar */
+  .sidebar-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: #4a89dc #f5f5f4;
+  }
+  
+  .markdown-content a {
+    @apply text-primary-600 hover:text-primary-700 underline;
+  }
+  
+  .markdown-content code {
+    @apply bg-slate-100 px-2 py-1 rounded text-sm font-mono text-slate-800;
+  }
+  
+  .markdown-content ul, .markdown-content ol {
+    @apply mb-4 ml-6;
+  }
+  
+  .markdown-content li {
+    @apply mb-2;
+  }
+}

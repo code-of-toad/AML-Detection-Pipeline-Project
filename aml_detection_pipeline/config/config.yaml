@@ -1,0 +1,60 @@
+# AML Detection Pipeline v2 — config
+# Single input: master_features_with_clustering.csv (from clean_data).
+# Pipeline discovers all scores_[ml_model].csv in ml_algorithms/outputs/ and generates
+# model_output_[ml_model].csv and model_output_[ml_model]_explanations.csv for each.
+
+# --- Paths (relative to pipeline root) ---
+paths:
+  input_dir: data/input
+  intermediate_dir: data/intermediate
+  output_dir: data/output
+  # Where to find partner score CSVs (any file scores_*.csv is used)
+  ml_algorithms_outputs: ml_algorithms/outputs
+
+  input_file: data/input/master_features_with_clustering.csv
+  rule_scores: data/intermediate/rule_based_scores.csv
+
+  # Optional: when set (e.g. from AML_Submission), copy model outputs here after each run
+  task_2_model_outputs: ../task_2_model_outputs
+  task_3_model_outputs_explanations: ../task_3_model_outputs_explanations
+
+# --- Rule-based scorer ---
+rule_based:
+  # Per-cluster uplift added to category-based score before capping at 1.0 (cluster_risk column).
+  cluster_boost:
+    individual_1: 0.05
+    individual_6: 0.05
+    individual_4: 0.07
+    individual_5: 0.12
+    individual_3: 0.15
+    business_3: 0.15
+    business_4: 0.15
+    business_6: 0.15
+  category_weights:
+    structuring_amount: 0.25
+    channel: 0.25
+    geographic: 0.20
+    behavioral: 0.20
+    profile: 0.10
+
+# --- Fusion (rule + one partner CSV) ---
+fusion:
+  rule_weight: 0.70
+  anomaly_weight: 0.30
+  normalize_partner_score: true
+
+# --- Predictions ---
+predictions:
+  top_percentile: 5
+
+# --- Explanations ---
+explanations:
+  max_length_chars: 2000
+
+# --- Reports (PDF generation) ---
+reports:
+  generate_pdf: true
+
+# --- Viewer (launch GUI after pipeline) ---
+viewer:
+  launch_after_run: false

@@ -1,0 +1,16 @@
+# AML Submission package — Python dependencies
+# Install from AML_Submission/:  pip install -r requirements.txt
+
+# Core: pipeline, clean_data, viewer, PDF reports
+pandas>=1.3.0
+numpy>=1.20.0
+scikit-learn>=1.0.0
+PyYAML>=5.4.0
+reportlab>=3.6.0
+
+# ml_algorithms model scripts (ABOD, LOF, within-cluster LOF, etc.)
+matplotlib>=3.3.0
+seaborn>=0.11.0
+pyod>=1.0.0
+
+# tkinter is used by the explanation viewer (stdlib; on Linux may need python3-tk)

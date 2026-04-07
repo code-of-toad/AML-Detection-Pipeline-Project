@@ -1,0 +1,47 @@
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Mac system files
+.DS_Store
+**/.DS_Store
+
+# Node modules
+node_modules/
+
+# Large/sensitive data files
+clean_data/clean_original/*.csv
+clean_data/features/intermediate/*.csv
+clean_data/features/by_category/*.csv
+clean_data/features/final/*.csv
+clean_data/clustering/Kmeans_Seperate.csv
+clean_data/clustering/VersionA_*.csv
+
+# Model output CSVs (task 2 & 3)
+task_2_model_outputs/*.csv
+task_3_model_outputs_explanations/*.csv
+
+# Internal pipeline data
+aml_detection_pipeline/data/input/*.csv
+aml_detection_pipeline/data/intermediate/*.csv
+aml_detection_pipeline/data/output/*.csv
+
+# Testing/archived outputs
+aml_detection_pipeline/ml_algorithms/_archived_outputs/
+aml_detection_pipeline/ml_algorithms/model_abod/Testing\ Outputs/
+aml_detection_pipeline/ml_algorithms/model_lof/Testing\ Outputs/
+aml_detection_pipeline/ml_algorithms/model_abod/acc_ABOD_k60_scores_pct.csv
+aml_detection_pipeline/ml_algorithms/model_lof/accounts_full_PCA_LOF_k240_scores_FINAL.csv
+aml_detection_pipeline/ml_algorithms/model_within_cluster_lof/clustered_LOF_scores.csv
+aml_detection_pipeline/ml_algorithms/outputs/
+clustering/Cleaned\ Scripts/*.csv
+clustering/Clustering_Final/Version_A_\ Seperate/*.csv
+clustering/Clustering_Final/Version_B_\ Recluster/*.csv
+clustering/Clustering_Final/clustering_Cleaned.csv
+
+# Trained model artifacts (can be regenerated)
+aml_detection_pipeline/ml_algorithms/model_isolation_forest/artifacts/
+
+# Zoom submission form (internal admin)
+Team\ 88_Zoom\ Recording\ Submission\ Form.xlsx

@@ -1,0 +1,414 @@
+---
+title: "Selective Inference for K-means Clustering on Version B AML Segments"
+author: "Junyi Hou"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    number_sections: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+	echo = TRUE,
+	message = FALSE,
+	warning = FALSE
+)
+```
+
+1. Background and Objective
+
+This document implements selective inference for k-means clustering on the Version B AML customer segmentation pipeline.
+
+Unlike Version A, which clusters business and individual customers separately, Version B applies clustering to the full customer population in a shared FAMD feature space. The goal of this version is not to identify broad behavioral groups across all customers, but detect cross-behavior populations, such as businesses whose transactional behavior resembles individuals and vice versa.
+
+However, classical post-clustering comparisons are biased because the same data are used both to create the clusters and to test whether the clusters differ. The KmeansInference package addresses this problem by providing selective p-values for testing whether two estimated k-means clusters have different mean vectors, while accounting for the clustering step itself.
+
+We implement selective inference following Chen and Witten (2022), which provides valid post-clustering p-values by accounting for selection bias introduced during k-means clustering.
+
+The main goals of this analysis are:
+
+to determine whether the Version B global k-means clusters are statistically distinguishable after selection correction;
+to assess whether the chosen value of k produces meaningful global behavioral groups rather than artificial partitions;
+to identify whether Version B supports interpretable cross-population behavioral structure that can be safely used in the AML pipeline.
+
+This file focuses on Version B clustering only:
+
+full customer population
+one shared FAMD space
+one global k-means model
+
+The selective inference will be performed on the FAMD output matrix, because this is the feature space used for k-means clustering.
+
+```{r}
+library(tidyverse)
+library(KmeansInference)
+library(knitr)
+library(kableExtra)
+# Please use the following code to download the KmeansInference Package
+# require("devtools")
+# devtools::install_github("yiqunchen/KmeansInference")
+# library(KmeansInference)
+```
+
+```{r}
+versionb_after_path  <- "VersionB_afterFAMD.csv"
+versionb_before_path <- "VersionB_BeforeFAMD.csv"
+
+versionb_after  <- read.csv(versionb_after_path, check.names = FALSE)
+versionb_before <- read.csv(versionb_before_path, check.names = FALSE)
+```
+
+```{r}
+# ---- Basic dimensions ----
+cat("Version B AfterFAMD dimensions: ", dim(versionb_after), "\n")
+cat("Version B BeforeFAMD dimensions:", dim(versionb_before), "\n")
+```
+
+```{r}
+# ---- Preview columns ----
+cat("Version B AfterFAMD column names:\n")
+print(colnames(versionb_after))
+
+cat("\nVersion B BeforeFAMD first 20 columns:\n")
+print(colnames(versionb_before)[1:min(20, ncol(versionb_before))])
+```
+
+```{r}
+# ---- Convert AfterFAMD data to numeric matrix ----
+# This is the matrix to be used for k-means and selective inference.
+
+X_versionb <- versionb_after %>%
+  mutate(across(everything(), as.numeric)) %>%
+  as.matrix()
+
+# Rename columns for readability
+colnames(X_versionb) <- paste0("FAMD_", seq_len(ncol(X_versionb)))
+
+# ---- Validate FAMD matrix ----
+cat("Version B matrix mode: ", mode(X_versionb), "\n")
+cat("Version B matrix dimensions: ", dim(X_versionb), "\n")
+cat("Any missing values in Version B matrix? ", anyNA(X_versionb), "\n")
+```
+
+
+```{r}
+# ---- Summary table for imported data ----
+data_summary <- tibble(
+  dataset = c("Version B BeforeFAMD", "Version B AfterFAMD"),
+  n_rows = c(nrow(versionb_before), nrow(versionb_after)),
+  n_cols = c(ncol(versionb_before), ncol(versionb_after))
+)
+
+kable(data_summary, caption = "Imported Version B datasets and dimensions") %>%
+  kable_styling(full_width = FALSE)
+```
+
+```{r}
+# ---- Summary statistics of FAMD components ----
+versionb_famd_summary <- as.data.frame(X_versionb) %>%
+  summarise(across(everything(),
+                   list(mean = mean, sd = sd, min = min, max = max),
+                   .names = "{.col}_{.fn}"))
+
+cat("Version B FAMD component summary:\n")
+print(versionb_famd_summary)
+```
+
+```{r}
+# Keep customer IDs and metadata for interpretation later, but do not include them in X.
+
+versionb_ids <- versionb_before$customer_id
+versionb_meta <- versionb_before %>%
+  select(any_of(c("customer_id", "kyc_type", "province", "industry_code", "occupation_code")))
+
+cat("Analysis-ready global matrix created: X_versionb\n")
+```
+
+```{r}
+# Step 3:
+# 3. Package-owned k-means clustering with fixed seed
+
+k_versionb <- 4
+iter_max_value <- 30
+
+fixed_seed <- 1234
+
+cat("Using fixed seed:", fixed_seed, "\n")
+```
+
+```{r}
+# 3.1 Run kmeans_estimation ONCE
+
+versionb_est <- kmeans_estimation(
+  X = X_versionb,
+  k = k_versionb,
+  iter.max = iter_max_value,
+  seed = fixed_seed
+)
+
+cat("kmeans_estimation completed.\n")
+```
+
+```{r}
+# 3.2 Extract final clusters from kmeans_estimation
+
+cluster_versionb <- versionb_est$cluster[[versionb_est$iter]]
+cluster_versionb_raw <- paste0("global_", cluster_versionb)
+
+cat("Version B clusters from kmeans_estimation:\n")
+print(table(cluster_versionb))
+```
+
+```{r}
+# 3.3 Cluster size summary
+
+versionb_cluster_sizes <- data.frame(
+  cluster_num = sort(unique(cluster_versionb))
+) %>%
+  dplyr::mutate(
+    cluster_name = paste0("global_", cluster_num),
+    n = as.integer(table(cluster_versionb)[as.character(cluster_num)])
+  ) %>%
+  dplyr::arrange(cluster_num)
+
+print(versionb_cluster_sizes)
+```
+
+```{r}
+# 3.4 Analysis data frame
+
+versionb_analysis_df <- data.frame(
+  customer_id = versionb_ids,
+  cluster_raw = cluster_versionb_raw,
+  cluster_num = cluster_versionb,
+  X_versionb,
+  check.names = FALSE
+)
+
+# append kyc_type for later interpretation
+if ("kyc_type" %in% colnames(versionb_before)) {
+  versionb_analysis_df$kyc_type <- versionb_before$kyc_type
+}
+```
+
+```{r}
+# 3.5 Build all pair combinations
+
+get_all_pairs <- function(clusters, prefix) {
+  clusts <- sort(unique(clusters))
+  
+  pairs <- t(combn(clusts, 2))
+  pairs_df <- data.frame(
+    cluster_a = pairs[, 1],
+    cluster_b = pairs[, 2],
+    stringsAsFactors = FALSE
+  ) %>%
+    dplyr::mutate(
+      cluster_a_name = paste0(prefix, "_", cluster_a),
+      cluster_b_name = paste0(prefix, "_", cluster_b)
+    )
+  
+  pairs_df
+}
+
+pairs_versionb <- get_all_pairs(cluster_versionb, "global")
+
+print(pairs_versionb)
+```
+
+```{r}
+# 4. Selective inference
+
+# 4.1 Robust sigma estimator
+estimate_MED <- function(X) {
+  X_centered <- X
+  for (j in seq_len(ncol(X_centered))) {
+    X_centered[, j] <- X_centered[, j] - median(X_centered[, j])
+  }
+  sigma_hat <- sqrt(median(X_centered^2) / qchisq(0.5, df = 1))
+  return(sigma_hat)
+}
+
+sig_versionb <- estimate_MED(X_versionb)
+
+cat("Estimated sigma (Version B):", sig_versionb, "\n")
+```
+
+```{r}
+# 4.2 Pairwise selective inference helper
+run_pairwise_inference <- function(X, pairs_df, k, sig, seed, iter.max = 30) {
+  out_list <- vector("list", nrow(pairs_df))
+  start_total <- Sys.time()
+
+  for (i in seq_len(nrow(pairs_df))) {
+    iter_start <- Sys.time()
+
+    c1 <- pairs_df$cluster_a[i]
+    c2 <- pairs_df$cluster_b[i]
+
+    cat("\n====================================\n")
+    cat("Running pair", i, "of", nrow(pairs_df), "\n")
+    cat("Clusters:", c1, "vs", c2, "\n")
+    cat("Start time:", as.character(iter_start), "\n")
+    flush.console()
+
+    inf_obj <- kmeans_inference(
+      X = X,
+      k = k,
+      cluster_1 = c1,
+      cluster_2 = c2,
+      sig = sig,
+      iter.max = iter.max,
+      seed = seed
+    )
+
+    inf_sum <- summary(inf_obj)
+
+    iter_end <- Sys.time()
+    iter_time <- as.numeric(difftime(iter_end, iter_start, units = "secs"))
+
+    cat("Finished pair", i, "\n")
+    cat("Time taken (seconds):", round(iter_time, 2), "\n")
+    flush.console()
+
+    out_list[[i]] <- data.frame(
+      cluster_a = c1,
+      cluster_b = c2,
+      cluster_a_name = pairs_df$cluster_a_name[i],
+      cluster_b_name = pairs_df$cluster_b_name[i],
+      test_stat = inf_sum$test_stat,
+      p_selective = inf_sum$p_selective,
+      p_naive = inf_sum$p_naive,
+      time_sec = iter_time,
+      stringsAsFactors = FALSE
+    )
+  }
+
+  total_time <- as.numeric(difftime(Sys.time(), start_total, units = "secs"))
+  cat("\n====================================\n")
+  cat("TOTAL TIME (seconds):", round(total_time, 2), "\n")
+  cat("====================================\n")
+
+  out <- do.call(rbind, out_list)
+  out <- out[order(out$p_selective), ]
+  rownames(out) <- NULL
+  return(out)
+}
+```
+
+```{r}
+# 4.3 Run inference for Version B
+versionb_inference_results <- run_pairwise_inference(
+  X = X_versionb,
+  pairs_df = pairs_versionb,
+  k = k_versionb,
+  sig = sig_versionb,
+  seed = fixed_seed,
+  iter.max = iter_max_value
+)
+```
+
+```{r}
+# 4.4 Add significance flags
+versionb_inference_results <- versionb_inference_results %>%
+  dplyr::mutate(
+    selective_sig_05 = p_selective < 0.05,
+    naive_sig_05 = p_naive < 0.05
+  )
+```
+
+```{r}
+# 4.5 Print final result table
+cat("Version B selective inference results:\n")
+print(versionb_inference_results)
+```
+
+```{r}
+# 4.6 cluster-level summary of significant pair counts
+cluster_reliability_summary <- bind_rows(
+  versionb_inference_results %>%
+    transmute(cluster_num = cluster_a, selective_sig_05),
+  versionb_inference_results %>%
+    transmute(cluster_num = cluster_b, selective_sig_05)
+) %>%
+  group_by(cluster_num) %>%
+  summarise(
+    n_pairs_involved = n(),
+    n_significant_pairs = sum(selective_sig_05),
+    cluster_reliability = n_significant_pairs / n_pairs_involved,
+    .groups = "drop"
+  ) %>%
+  arrange(desc(cluster_reliability), cluster_num)
+
+cat("Cluster-level reliability summary:\n")
+print(cluster_reliability_summary)
+```
+
+```{r}
+# 4.7 cross-behavior flags
+if ("kyc_type" %in% colnames(versionb_analysis_df)) {
+  
+  cluster_kyc_mix <- versionb_analysis_df %>%
+    count(cluster_num, kyc_type) %>%
+    group_by(cluster_num) %>%
+    mutate(cluster_total = sum(n),
+           cluster_pct = n / cluster_total) %>%
+    ungroup() %>%
+    arrange(cluster_num, desc(cluster_pct))
+  
+  print(cluster_kyc_mix)
+  
+  dominant_kyc <- cluster_kyc_mix %>%
+    group_by(cluster_num) %>%
+    slice_max(order_by = cluster_pct, n = 1, with_ties = FALSE) %>%
+    ungroup() %>%
+    select(cluster_num, dominant_kyc_type = kyc_type)
+  
+  versionb_cross_behavior_flags <- versionb_analysis_df %>%
+    select(customer_id, cluster_num, cluster_raw, kyc_type) %>%
+    left_join(dominant_kyc, by = "cluster_num") %>%
+    mutate(
+      cross_behavior_flag = kyc_type != dominant_kyc_type
+    )
+  
+  cat("Cross-behavior flag summary:\n")
+  print(table(versionb_cross_behavior_flags$cross_behavior_flag))
+}
+```
+
+```{r}
+# 4.8 Save outputs
+write.csv(
+  versionb_inference_results,
+  "versionb_selective_inference_results.csv",
+  row.names = FALSE
+)
+
+write.csv(
+  versionb_analysis_df %>% dplyr::select(any_of(c("customer_id", "cluster_raw", "cluster_num", "kyc_type"))),
+  "versionb_kmeans_estimation_labels.csv",
+  row.names = FALSE
+)
+
+write.csv(
+  cluster_reliability_summary,
+  "versionb_cluster_reliability_summary.csv",
+  row.names = FALSE
+)
+
+if (exists("versionb_cross_behavior_flags")) {
+  write.csv(
+    versionb_cross_behavior_flags,
+    "versionb_cross_behavior_flags.csv",
+    row.names = FALSE
+  )
+}
+
+cat("Version B selective inference result files exported.\n")
+```
+## References
+
+Chen, Y. T., & Witten, D. M. (2022). *Selective inference for k-means clustering*. 
+https://doi.org/10.48550/arxiv.2203.15267

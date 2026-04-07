@@ -1,0 +1,7 @@
+"cluster_num","cluster_name","significant_pairs_involving_cluster","reliability_score"
+1,"business_1",3,0.6
+2,"business_2",4,0.8
+3,"business_3",4,0.8
+4,"business_4",4,0.8
+5,"business_5",4,0.8
+6,"business_6",5,1
